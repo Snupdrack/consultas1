@@ -1,0 +1,243 @@
+<!-- SOLO TE PONGO EL SCRIPT MODIFICADO PARA NO HACERTE SCROLL INFINITO -->
+<script>
+const API_BASE = 'http://localhost:8000';
+const BACKEND_URL = `${API_BASE}/api/consultar`;
+
+let currentService = null;
+let showRaw = false;
+let pollingTimer = null;
+
+const FORMS = {
+  renapo: {
+    title: 'RENAPO — Validar CURP',
+    fields: [
+      { key:'curp', label:'CURP', type:'text', required:true, maxlength:18 },
+      { key:'generarRFC', label:'Generar RFC', type:'toggle' },
+      { key:'documento', label:'Tipo de consulta', type:'select',
+        options:[
+          {value:'',label:'Selecciona tipo'},
+          {value:'0',label:'Validación'},
+          {value:'1',label:'PDF'}
+        ]
+      },
+      { key:'url', label:'URL callback', type:'url', conditional:'documento' },
+      { key:'force_async', label:'Procesar por webhook', type:'toggle' }
+    ]
+  },
+
+  sat: {
+    title:'SAT — Validación RFC',
+    fields:[{key:'rfc',label:'RFC',type:'text',required:true,maxlength:13}]
+  },
+
+  imss_nss: {
+    title:'IMSS — Obtener NSS',
+    fields:[
+      {key:'curp',label:'CURP',type:'text',required:true,maxlength:18},
+      {key:'force_async',label:'Usar webhook',type:'toggle'}
+    ]
+  },
+
+  imss_empleo: {
+    title:'IMSS — Historial laboral',
+    fields:[
+      {key:'curp',label:'CURP',type:'text',required:true,maxlength:18},
+      {key:'nss',label:'NSS',type:'text',required:true,maxlength:11},
+      {key:'force_async',label:'Usar webhook',type:'toggle'}
+    ]
+  },
+
+  issste: {
+    title:'ISSSTE — Historial',
+    fields:[
+      {key:'curp',label:'CURP',type:'text',required:true,maxlength:18},
+      {key:'nss',label:'NSS',type:'text'},
+      {key:'force_async',label:'Usar webhook',type:'toggle'}
+    ]
+  },
+
+  ine: {
+    title:'INE — Validación',
+    fields:[
+      {key:'cic',label:'CIC',type:'text',required:true},
+      {key:'ocr',label:'OCR',type:'text',required:true}
+    ]
+  }
+};
+
+function selectService(s) {
+  currentService = s;
+  showRaw = false;
+  clearPolling();
+
+  document.querySelectorAll('.service-card').forEach(c =>
+    c.classList.toggle('active', c.dataset.service === s)
+  );
+
+  renderForm(s);
+  document.getElementById('btnConsultar').disabled = false;
+
+  const rp = document.getElementById('resultPanel');
+  rp.classList.remove('visible');
+  rp.innerHTML = '';
+}
+
+function renderForm(s) {
+  const {title, fields} = FORMS[s];
+
+  const html = fields.map(f => {
+    if (f.type === 'toggle') {
+      return `
+      <div class="toggle-group">
+        <label>${f.label}</label>
+        <label class="toggle-switch">
+          <input type="checkbox" id="f_${f.key}" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>`;
+    }
+
+    if (f.type === 'select') {
+      return `
+      <div class="field-group">
+        <label>${f.label}</label>
+        <select id="f_${f.key}" onchange="onDocumentoChange(this.value)">
+          ${f.options.map(o=>`<option value="${o.value}">${o.label}</option>`).join('')}
+        </select>
+      </div>`;
+    }
+
+    if (f.type === 'url') {
+      return `
+      <div class="field-group conditional-field" id="wrap_${f.key}">
+        <label>${f.label}</label>
+        <input type="url" id="f_${f.key}" />
+      </div>`;
+    }
+
+    return `
+    <div class="field-group">
+      <label>${f.label}</label>
+      <input type="text" id="f_${f.key}" ${f.maxlength?`maxlength="${f.maxlength}"`:''}/>
+    </div>`;
+  }).join('');
+
+  document.getElementById('formPanel').innerHTML =
+    `<div class="form-title">${title}</div>${html}`;
+}
+
+function onDocumentoChange(v){
+  const el = document.getElementById('wrap_url');
+  if(el) el.classList.toggle('visible', v === '1');
+}
+
+function getPayload(){
+  const payload = { servicio: currentService };
+  const {fields} = FORMS[currentService];
+
+  fields.forEach(f=>{
+    const el = document.getElementById(`f_${f.key}`);
+    if(!el) return;
+
+    if(f.type==='toggle'){
+      if(el.checked) payload[f.key]=true;
+    } else {
+      const v = el.value.trim();
+      if(v) payload[f.key]=v.toUpperCase();
+    }
+  });
+
+  return payload;
+}
+
+function validate(payload){
+  const {fields} = FORMS[currentService];
+  const missing = fields.filter(f=>f.required && !payload[f.key]);
+
+  if(missing.length){
+    renderError("Campos faltantes", missing.map(m=>m.label).join(', '));
+    return false;
+  }
+  return true;
+}
+
+async function consultar(){
+  if(!currentService) return;
+
+  clearPolling();
+
+  const btn = document.getElementById('btnConsultar');
+  const payload = getPayload();
+
+  if(!validate(payload)) return;
+
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  try{
+    const res = await fetch(BACKEND_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+
+    if(data.mode === 'async'){
+      renderPending();
+      startPolling(data.request_id);
+    } else {
+      renderSuccess(data.data || data);
+    }
+
+  }catch(e){
+    renderError("Error", e.message);
+  }
+
+  btn.classList.remove('loading');
+  btn.disabled = false;
+}
+
+function renderPending(){
+  const rp = document.getElementById('resultPanel');
+  rp.innerHTML = `
+    <div class="result-header ok">Procesando consulta...</div>
+    <div class="result-body"><pre>Esperando respuesta del sistema...</pre></div>`;
+  rp.classList.add('visible');
+}
+
+function startPolling(id){
+  pollingTimer = setInterval(async()=>{
+    const r = await fetch(`${API_BASE}/api/resultados/${id}`);
+    const d = await r.json();
+
+    if(d.status === 'completed'){
+      clearPolling();
+      renderSuccess(d.webhook_payload || d);
+    }
+  },2000);
+}
+
+function clearPolling(){
+  if(pollingTimer){
+    clearInterval(pollingTimer);
+    pollingTimer = null;
+  }
+}
+
+function renderSuccess(data){
+  const rp = document.getElementById('resultPanel');
+  rp.innerHTML = `
+    <div class="result-header ok">Consulta exitosa</div>
+    <div class="result-body"><pre>${JSON.stringify(data,null,2)}</pre></div>`;
+  rp.classList.add('visible');
+}
+
+function renderError(t,m){
+  const rp = document.getElementById('resultPanel');
+  rp.innerHTML = `
+    <div class="result-header err">${t}</div>
+    <div class="result-body"><pre>${m}</pre></div>`;
+  rp.classList.add('visible');
+}
+</script>
