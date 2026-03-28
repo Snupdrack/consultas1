@@ -35,9 +35,9 @@ ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",
 NUBARIUM_URLS = {
     "renapo": "https://curp.nubarium.com/renapo/v3/valida_curp",
     "imss_nss": "https://api.nubarium.com/imss/why/v1/obtener_nss",
-    "imss_empleo": "https://api.nubarium.com/imex/se/v1/employment-info-imss",
+    "imss_empleo": "https://api.nubarium.com/mex/ss/v1/employment-info-imss",
     "issste": "https://api.nubarium.com/issste/v2/obtener_historial",
-    "sat": "https://services.nubarium.com/biometricos/sat/v1/getRfc",
+    "sat": "https://rfc.nubarium.com/sat/valida_rfc",
     "ine": "https://services.nubarium.com/biometricos/ine/v1/getIne",
 }
 
