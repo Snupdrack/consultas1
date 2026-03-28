@@ -183,7 +183,7 @@ def build_payload(req: ConsultaRequest, request_id: str) -> Dict[str, Any]:
         if req.uri:
             payload["url"] = req.uri
         elif force_async and cfg.get("supports_webhook"):
-            payload["uri"] = webhook_url_for(s, request_id)
+            payload["url"] = webhook_url_for(s, request_id)
         if req.encabezados:
             payload["encabezados"] = req.encabezados
         elif force_async and cfg.get("headers_field"):
@@ -195,7 +195,7 @@ def build_payload(req: ConsultaRequest, request_id: str) -> Dict[str, Any]:
         if req.uri:
             payload["url"] = req.uri
         elif force_async and cfg.get("supports_webhook"):
-            payload["uri"] = webhook_url_for(s, request_id)
+            payload["url"] = webhook_url_for(s, request_id)
         if req.encabezados:
             payload["encabezados"] = req.encabezados
         elif force_async and cfg.get("headers_field"):
@@ -209,7 +209,7 @@ def build_payload(req: ConsultaRequest, request_id: str) -> Dict[str, Any]:
         if req.uri:
             payload["url"] = req.uri
         elif force_async and cfg.get("supports_webhook"):
-            payload["uri"] = webhook_url_for(s, request_id)
+            payload["url"] = webhook_url_for(s, request_id)
         if req.encabezados:
             payload["encabezados"] = req.encabezados
         elif force_async and cfg.get("headers_field"):
@@ -293,7 +293,7 @@ async def consultar(req: ConsultaRequest):
     cfg = SERVICE_CONFIG.get(servicio, {})
     expected_async = False
     if cfg.get("supports_webhook"):
-        if payload.get("url") or payload.get("uri"):
+        if payload.get("url"):
             expected_async = True
 
     record = {
