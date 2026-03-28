@@ -240,7 +240,7 @@ footer a { color: var(--gold); text-decoration: none; }
 
 <script>
 const API_BASE = 'https://consultas1-production.up.railway.app/';
-const BACKEND_URL = `${API_BASE}/api/consultar`;
+const BACKEND_URL = `${API_BASE}api/consultar`;
 let currentService = null, showRaw = false, pollingTimer = null;
 
 const FORMS = {
@@ -500,7 +500,7 @@ function renderError(title, msg) {
 function startPolling(requestId) {
   pollingTimer = setInterval(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/resultados/${requestId}`);
+      const res = await fetch(`${API_BASE}api/resultados/${requestId}`);
       const data = await res.json();
 
       if (!res.ok) {
