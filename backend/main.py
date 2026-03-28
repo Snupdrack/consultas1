@@ -55,21 +55,21 @@ SERVICE_CONFIG = {
     "imss_nss": {
         "required_fields": ["curp"],
         "supports_webhook": True,
-        "webhook_field": "uri",
+        "webhook_field": "url",
         "headers_field": "encabezados",
         "frontend_async_default": True,
     },
     "imss_empleo": {
         "required_fields": ["curp", "nss"],
         "supports_webhook": True,
-        "webhook_field": "uri",
+        "webhook_field": "url",
         "headers_field": "encabezados",
         "frontend_async_default": True,
     },
     "issste": {
         "required_fields": ["curp"],
         "supports_webhook": True,
-        "webhook_field": "uri",
+        "webhook_field": "url",
         "headers_field": "encabezados",
         "frontend_async_default": True,
     },
@@ -181,7 +181,7 @@ def build_payload(req: ConsultaRequest, request_id: str) -> Dict[str, Any]:
     if s == "imss_nss":
         payload = {"curp": req.curp}
         if req.uri:
-            payload["uri"] = req.uri
+            payload["url"] = req.uri
         elif force_async and cfg.get("supports_webhook"):
             payload["uri"] = webhook_url_for(s, request_id)
         if req.encabezados:
@@ -193,7 +193,7 @@ def build_payload(req: ConsultaRequest, request_id: str) -> Dict[str, Any]:
     if s == "imss_empleo":
         payload = {"curp": req.curp, "nss": req.nss}
         if req.uri:
-            payload["uri"] = req.uri
+            payload["url"] = req.uri
         elif force_async and cfg.get("supports_webhook"):
             payload["uri"] = webhook_url_for(s, request_id)
         if req.encabezados:
@@ -207,7 +207,7 @@ def build_payload(req: ConsultaRequest, request_id: str) -> Dict[str, Any]:
         if req.nss:
             payload["nss"] = req.nss
         if req.uri:
-            payload["uri"] = req.uri
+            payload["url"] = req.uri
         elif force_async and cfg.get("supports_webhook"):
             payload["uri"] = webhook_url_for(s, request_id)
         if req.encabezados:
