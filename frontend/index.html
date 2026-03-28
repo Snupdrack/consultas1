@@ -137,6 +137,15 @@ footer a { color: var(--gold); text-decoration: none; }
 @keyframes fadeUp   { from{opacity:0;transform:translateY(14px)}  to{opacity:1;transform:none} }
 @keyframes spin     { to{transform:rotate(360deg)} }
 @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.cards-grid-inner { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 6px; }
+.data-card { background: #0f0f0f; border: 1px solid #222; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 5px; transition: border-color .18s; }
+.data-card:hover { border-color: rgba(201,162,39,.3); }
+.data-card-label { font-size: .65rem; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: .08em; }
+.data-card-value { font-size: .88rem; color: #e5e7eb; font-weight: 500; word-break: break-word; line-height: 1.4; }
+.card-section { grid-column: 1/-1; margin-top: 6px; }
+.card-section-title { font-size: .7rem; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #1a1a1a; }
 </style>
 </head>
 <body>
@@ -251,8 +260,6 @@ const FORMS = {
       { key:'curp', label:'CURP', type:'text', placeholder:'GOML850312HDFNRN09', hint:'18 caracteres, obligatorio', maxlength:18, required:true },
       { key:'generarRFC', label:'Generar RFC', type:'toggle', hint:'Genera un RFC estimado' },
       { key:'documento', label:'Tipo de consulta', type:'select', hint:'PDF requiere callback', options:[{value:'',label:'— Elige tipo —'},{value:'0',label:'0 — Validación regular'},{value:'1',label:'1 — Solicitar PDF'}] },
-      { key:'url', label:'URL callback (opcional)', type:'url', placeholder:'https://tu-backend.com/webhook', hint:'Si no la pones y activas async, el backend genera una', conditional:'documento' },
-      { key:'force_async', label:'Esperar por webhook', type:'toggle', hint:'Útil cuando documento=1 o el proveedor responde por callback' }
     ]
   },
   sat: {
@@ -264,7 +271,6 @@ const FORMS = {
     endpoint_info:'api.nubarium.com/imss/why/v1/obtener_nss',
     fields:[
       {key:'curp',label:'CURP',type:'text',placeholder:'GOML850312HDFNRN09',hint:'Obligatorio',maxlength:18, required:true},
-      {key:'force_async',label:'Usar webhook',type:'toggle',hint:'Recomendado para este endpoint'}
     ]
   },
   imss_empleo: {
@@ -273,7 +279,6 @@ const FORMS = {
     fields:[
       {key:'curp',label:'CURP',type:'text',placeholder:'GOML850312HDFNRN09',hint:'Obligatorio',maxlength:18, required:true},
       {key:'nss',label:'NSS',type:'text',placeholder:'92123456789',hint:'Obligatorio',maxlength:11, required:true},
-      {key:'force_async',label:'Usar webhook',type:'toggle',hint:'Recomendado para este endpoint'}
     ]
   },
   issste: {
@@ -282,7 +287,6 @@ const FORMS = {
     fields:[
       {key:'curp',label:'CURP',type:'text',placeholder:'GOML850312HDFNRN09',hint:'Obligatorio',maxlength:18, required:true},
       {key:'nss',label:'NSS',type:'text',placeholder:'Opcional',hint:'Si tu flujo lo ocupa',maxlength:11},
-      {key:'force_async',label:'Usar webhook',type:'toggle',hint:'Recomendado para este endpoint'}
     ]
   },
   ine: {
@@ -324,9 +328,7 @@ function renderForm(service) {
     html = fields.map(fh).join('');
   }
 
-  const epInfo = endpoint_info
-    ? `<div style="font-size:.68rem;color:var(--gray);font-family:'SF Mono','Fira Code',monospace;margin-top:-4px;padding:6px 10px;background:#0a0a0a;border-radius:6px;border:1px solid var(--border)">POST ↗ ${endpoint_info}</div>`
-    : '';
+  const epInfo = '';
 
   document.getElementById('formPanel').innerHTML = `<div class="form-title">${title}</div>${epInfo}${html}`;
 }
@@ -411,12 +413,6 @@ function validatePayload(payload) {
     return false;
   }
 
-  if (currentService === 'renapo' && payload.documento === '1' && !payload.url && !payload.force_async) {
-    shakeForm();
-    renderError('Callback requerido', 'Para PDF necesitas URL de callback o activar "Esperar por webhook".');
-    return false;
-  }
-
   return true;
 }
 
@@ -467,12 +463,13 @@ async function consultar() {
 
 function renderPending(data) {
   const rp = document.getElementById('resultPanel');
+  const ack = data.provider_ack || {};
+  const cards = buildCards(ack);
   rp.innerHTML = `
-    <div class="result-header ok"><span class="rh-dot"></span>Consulta enviada</div>
-    <div class="result-body">
-      <p style="margin-bottom:10px;color:var(--gray-light)">Esperando respuesta por webhook…</p>
-      <pre>${esc(JSON.stringify(data, null, 2))}</pre>
-    </div>`;
+    <div class="result-header ok"><span class="rh-dot"></span>Datos recibidos
+      <button class="toggle-raw" onclick="toggleView(this,'${encodeURIComponent(JSON.stringify(ack,null,2))}')">{ } JSON</button>
+    </div>
+    <div class="result-body" id="resultBody"><div class="cards-grid">${cards}</div></div>`;
   rp.classList.add('visible');
   rp.scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -481,11 +478,12 @@ function renderSuccess(payload) {
   const rp = document.getElementById('resultPanel');
   const raw = JSON.stringify(payload, null, 2);
   const lbl = (currentService || '').toUpperCase().replace('_', ' ');
+  const cards = buildCards(payload);
   rp.innerHTML = `
     <div class="result-header ok"><span class="rh-dot"></span>Consulta exitosa — ${lbl}
       <button class="toggle-raw" onclick="toggleView(this,'${encodeURIComponent(raw)}')">{ } JSON</button>
     </div>
-    <div class="result-body" id="resultBody"><table class="kv-table">${flatKV(payload,'')}</table></div>`;
+    <div class="result-body" id="resultBody"><div class="cards-grid">${cards}</div></div>`;
   rp.classList.add('visible');
   rp.scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -545,6 +543,23 @@ function toggleView(btn, enc) {
     body.innerHTML = `<table class="kv-table">${flatKV(JSON.parse(raw), '')}</table>`;
     btn.textContent = '{ } JSON';
   }
+}
+
+function buildCards(obj, prefix) {
+  prefix = prefix || '';
+  if (typeof obj !== 'object' || obj === null) return '';
+  let html = '';
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? prefix + '.' + k : k;
+    if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+      html += `<div class="card-section"><div class="card-section-title">${esc(k)}</div><div class="cards-grid-inner">${buildCards(v, key)}</div></div>`;
+    } else {
+      const val = Array.isArray(v) ? v.map(i => typeof i === 'object' ? JSON.stringify(i) : String(i ?? '')).join(', ') : String(v ?? '');
+      const label = k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim();
+      html += `<div class="data-card"><div class="data-card-label">${esc(label)}</div><div class="data-card-value">${esc(val) || '<span style="opacity:.4">—</span>'}</div></div>`;
+    }
+  }
+  return html;
 }
 
 function flatKV(obj, prefix) {
